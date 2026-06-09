@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>台股投信籌碼追蹤</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0d0f14;
+    color: #e0e0e0;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    padding: 16px;
+  }
+  .header {
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding-bottom: 16px;
+    margin-bottom: 20px;
+  }
+  .title { font-size: 20px; font-weight: 700; color: #4ea8de; }
+  .subtitle { font-size: 12px; color: #666; margin-top: 4px; }
+  .update-time { font-size: 11px; color: #555; margin-top: 8px; }
+  .no-data { color: #666; text-align: center; padding: 40px; }
+  .card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+  .stock-name { font-size: 16px; font-weight: 700; color: #fff; }
+  .stock-code { font-size: 12px; color: #888; margin-top: 2px; }
+  .score-badge {
+    font-size: 12px; font-weight: 700;
+    padding: 4px 10px; border-radius: 20px;
+    background: rgba(78,168,222,0.15);
+    color: #4ea8de;
+    border: 1px solid rgba(78,168,222,0.3);
+  }
+  .score-6 { background: rgba(105,219,124,0.15); color: #69db7c; border-color: rgba(105,219,124,0.3); }
+  .score-5 { background: rgba(78,168,222,0.15); color: #4ea8de; border-color: rgba(78,168,222,0.3); }
+  .score-4 { background: rgba(232,200,64,0.15); color: #e8c840; border-color: rgba(232,200,64,0.3); }
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px; margin-bottom: 12px;
+  }
+  .metric {
+    background: rgba(255,255,255,0.04);
+    border-radius: 8px; padding: 8px; text-align: center;
+  }
+  .metric-label { font-size: 10px; color: #666; margin-bottom: 4px; }
+  .metric-value { font-size: 14px; font-weight: 700; }
+  .positive { color: #69db7c; }
+  .negative { color: #ff6b6b; }
+  .neutral  { color: #e0e0e0; }
+  .warning  { color: #ffd43b; }
+  .section-title {
+    font-size: 11px; color: #666;
+    letter-spacing: 1px; margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .checklist { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .check-item {
+    font-size: 11px; padding: 3px 8px;
+    border-radius: 6px; background: rgba(255,255,255,0.05);
+  }
+  .check-pass { color: #69db7c; }
+  .check-fail { color: #ff6b6b; }
+  .broker-box {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px; padding: 10px;
+    font-size: 12px; color: #aaa;
+    margin-top: 8px; line-height: 1.8;
+  }
+  .broker-highlight { color: #4ea8de; font-weight: 600; }
+  .divider { border: none; border-top: 1px solid rgba(255,255,255,0.06); margin: 12px 0; }
+  .tech-row {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;
+  }
+  .tech-item {
+    font-size: 11px; padding: 3px 10px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.05);
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="title">台股投信籌碼追蹤</div>
+  <div class="subtitle">投信連買 · 分點集中度 · 主力券商動向</div>
+  <div class="update-time" id="update-time">載入中...</div>
+</div>
+
+<div id="content">
+  <div class="no-data">載入資料中...</div>
+</div>
+
+<script>
+fetch('data.json?t=' + Date.now())
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('update-time').textContent =
+      '更新時間：' + data.update_time;
+
+    const content = document.getElementById('content');
+    if (!data.stocks || data.stocks.length === 0) {
+      content.innerHTML = '<div class="no-data">今日無符合條件股票</div>';
+      return;
+    }
+
+    content.innerHTML = data.stocks.map(s => {
+      const total = parseInt(s['總得分']) || 0;
+      const scoreClass = total >= 6 ? 'score-6' : total >= 5 ? 'score-5' : 'score-4';
+
+      // 投信 checklist
+      const trustChecks = [
+        ['連買≥3日', s['投信連買≥3日']],
+        ['占比≥0.1%', s['10日占比≥0.1%']],
+        ['加速≥60%', s['5d/10d≥60%']],
+      ];
+
+      // 分點 checklist
+      const brokerChecks = [
+        ['前5集中≥60%', s['前5券商集中≥60%']],
+        ['主力出現', s['主力券商出現']],
+        ['單券商≥10%', s['單券商異常≥10%']],
+      ];
+
+      // 技術面 checklist
+      const techChecks = [
+        ['股價>季線', s['股價>季線']],
+        ['季線向上', s['季線向上']],
+      ];
+
+      const renderChecks = (checks) => checks.map(([label, val]) =>
+        `<span class="check-item ${val==='✅'?'check-pass':'check-fail'}">
+          ${val==='✅'?'✓':'✗'} ${label}</span>`
+      ).join('');
+
+      // 主力券商高亮
+      const brokerText = s['前5大券商'] || '—';
+
+      return `
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="stock-name">${s['名稱']}</div>
+            <div class="stock-code">${s['代碼']}</div>
+          </div>
+          <span class="score-badge ${scoreClass}">總分 ${s['總得分']}/6</span>
+        </div>
+
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">收盤價</div>
+            <div class="metric-value neutral">${s['收盤價']}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">距季線</div>
+            <div class="metric-value ${parseFloat(s['距季線%'])>15?'warning':parseFloat(s['距季線%'])>0?'positive':'negative'}">
+              ${parseFloat(s['距季線%'])>0?'+':''}${s['距季線%']}%
+            </div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">5日漲幅</div>
+            <div class="metric-value ${parseFloat(s['5日漲幅%'])>=0?'positive':'negative'}">
+              ${parseFloat(s['5日漲幅%'])>=0?'+':''}${s['5日漲幅%']}%
+            </div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">投信連買</div>
+            <div class="metric-value ${parseInt(s['投信連買日'])>=5?'positive':'neutral'}">
+              ${s['投信連買日']}日
+            </div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">10日買超</div>
+            <div class="metric-value positive">${Math.round(s['10日買超張'])}張</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">前5集中度</div>
+            <div class="metric-value ${parseFloat(s['前5集中度%'])>=60?'positive':'neutral'}">
+              ${s['前5集中度%']}%
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">投信條件</div>
+        <div class="checklist">${renderChecks(trustChecks)}</div>
+
+        <div class="section-title">分點條件</div>
+        <div class="checklist">${renderChecks(brokerChecks)}</div>
+
+        <div class="section-title">技術面</div>
+        <div class="checklist">${renderChecks(techChecks)}</div>
+
+        <hr class="divider">
+
+        <div class="section-title">前5大買超券商</div>
+        <div class="broker-box">
+          ${s['出現主力'] && s['出現主力'] !== '—'
+            ? `<span class="broker-highlight">★ 主力：${s['出現主力']}</span><br>`
+            : ''}
+          ${brokerText}
+        </div>
+
+        <div class="tech-row">
+          <span class="tech-item">占比 ${s['10日占比%']}%</span>
+          <span class="tech-item">加速 ${s['5d/10d%']}%</span>
+          <span class="tech-item">最大券商 ${s['最大券商占量%']}%</span>
+        </div>
+      </div>`;
+    }).join('');
+  })
+  .catch(() => {
+    document.getElementById('update-time').textContent = '尚無資料';
+    document.getElementById('content').innerHTML =
+      '<div class="no-data">尚未有今日資料，請稍後再試</div>';
+  });
+</script>
+</body>
+</html>
